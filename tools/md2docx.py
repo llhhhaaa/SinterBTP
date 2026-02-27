@@ -36,6 +36,36 @@ def add_runs(paragraph, text):
                     paragraph.add_run(sp)
 
 def md_to_docx(md_path, docx_path):
+    """Use pandoc to convert markdown to docx for better math support."""
+    import subprocess
+    try:
+        # 使用 pandoc 进行转换，确保公式正确处理
+        # 针对 Windows 环境下的中文路径问题，尝试先切换工作目录
+        abs_md = os.path.abspath(md_path)
+        abs_docx = os.path.abspath(docx_path)
+        md_dir = os.path.dirname(abs_md)
+        rel_md = os.path.basename(abs_md)
+        
+        # 在文件所在目录下运行 pandoc，减少相对路径编码问题
+        # 增加 --standalone 参数和明确的格式指定
+        cmd = ['pandoc', '-s', rel_md, '-o', abs_docx, '--from=markdown+tex_math_dollars+tex_math_single_backslash']
+        
+        # 针对 Windows 上的编码问题，可以尝试设置环境变量
+        env = os.environ.copy()
+        env['PYTHONIOENCODING'] = 'utf-8'
+        
+        result = subprocess.run(cmd, check=True, cwd=md_dir, capture_output=True, text=True, env=env)
+        print(f'Pandoc saved: {docx_path}')
+        if result.stderr:
+            print(f'Pandoc warnings: {result.stderr}')
+    except Exception as e:
+        print(f'Pandoc error: {e}')
+        if hasattr(e, 'stderr') and e.stderr:
+            print(f'Pandoc stderr: {e.stderr}')
+        print('Falling back to basic converter...')
+        _md_to_docx_legacy(md_path, docx_path)
+
+def _md_to_docx_legacy(md_path, docx_path):
     md_dir = os.path.dirname(os.path.abspath(md_path))
     with open(md_path, 'r', encoding='utf-8') as f:
         lines = f.read().split('\n')
