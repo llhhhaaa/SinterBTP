@@ -1,0 +1,13 @@
+torch==2.5.1+cu121
+pandas==2.3.3
+numpy==2.2.6
+scipy==1.15.3
+scikit-learn==1.7.2
+matplotlib==3.10.7
+openpyxl==3.1.5
+tqdm==4.67.1
+python-docx==1.2.0
+# tensorboard 在 pip list 中未直接显示，可能是因为它是作为依赖或者以不同名称安装的，
+# 或者我漏看了。但在 requirements.txt 中有，这里由于无法确认版本，暂不强制锁定或保持原样。
+# 经检查，pip list 中确实没有 tensorboard，可能需要安装。
+tensorboard
