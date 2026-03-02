@@ -39,7 +39,7 @@ class TrainConfig:
     USE_DATA_CACHE: bool = True        # 是否使用数据缓存
     CACHE_DIR: str = "data/cache"      # 缓存目录
     PREGENERATE_ONLY: bool = False     # 是否仅运行预生成逻辑
-    enable_cv: bool = True                # 是否开启交叉验证 (1为开启, 0为关闭)
+    enable_cv: bool = False                # 是否开启交叉验证 (1为开启, 0为关闭)
 
     # 是否开启 RevIN (消除逐实例分布漂移)
     enable_revin: bool = True          # 是否开启 RevIN (消除逐实例分布漂移)
@@ -161,8 +161,8 @@ class TrainConfig:
     lr: float = 0.0001                   # 学习率 (Adam 优化器)
     epochs: int = 15                     # 最大训练轮数
     batch_size: int = 256                # 批大小
-    val_split: float = 0.15               # 验证集比例
-    test_split: float = 0.15              # 测试集比例 (0 表示不划分独立测试集)
+    val_split: float = 0.2               # 验证集比例
+    test_split: float = 0.25              # 测试集比例 (0 表示不划分独立测试集)
     seed: int = 42                       # 随机种子
     num_workers: int = 4                 # 数据加载线程数
     weight_decay: float = 0.01           # L2 正则化
@@ -221,7 +221,7 @@ class TrainConfig:
     health_W_pos: float = 2.79         
     health_W_stab: float = 1.46        
     health_W_trend: float = 2          
-    health_beta_ewma: float = 0.97     
+    health_beta_ewma: float = 0.95     
     
     
     enable_delta_forecast: bool = 0    # 是否预测"变化量"(Delta)
