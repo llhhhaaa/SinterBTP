@@ -772,8 +772,14 @@ class Visualizer:
             for j, res in enumerate(cv_results):
                 data[i, j] = res.get(m, 0)
         
-        # 归一化 (按行)
+        # 归一化 (按行) - 对于越小越好的指标，归一化后需要反转使绿色表示更好
+        # metrics 中 mae, mape, rmse, sharpness 越小越好，coverage 越大越好
         data_norm = (data - data.min(axis=1, keepdims=True)) / (data.max(axis=1, keepdims=True) - data.min(axis=1, keepdims=True) + 1e-8)
+        
+        # 反转越小越好的指标，使绿色表示更好
+        for i, m in enumerate(metrics):
+            if m in ["mae", "mape", "rmse", "sharpness"]:
+                data_norm[i] = 1 - data_norm[i]
         
         fig, ax = plt.subplots(figsize=(12, 6))
         im = ax.imshow(data_norm, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1)
@@ -783,14 +789,15 @@ class Visualizer:
         ax.set_yticks(range(len(metrics)))
         ax.set_yticklabels(metrics)
         
-        # 标注数值
+        # 标注数值 - 颜色深绿时用白色文字，颜色红/黄时用黑色文字
         for i in range(len(metrics)):
             for j in range(n_folds):
-                text = ax.text(j, i, f"{data[i, j]:.3f}", ha="center", va="center", 
-                              color="black" if data_norm[i, j] > 0.5 else "white", fontsize=9, fontweight='bold')
+                text = ax.text(j, i, f"{data[i, j]:.3f}", ha="center", va="center",
+                              color="white" if data_norm[i, j] > 0.6 else "black", fontsize=9, fontweight='bold')
         
-        plt.colorbar(im, ax=ax, label="归一化分数 (0-1)")
-        ax.set_title("交叉验证性能热力图 (颜色越绿越好)", fontweight="bold", fontsize=14)
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label("性能评分 (颜色越绿越好)", fontsize=11)
+        ax.set_title("交叉验证性能热力图", fontweight="bold", fontsize=14)
         
         self._savefig(fig, fname)
 
@@ -933,26 +940,36 @@ class Visualizer:
         # 4. 绘图
         fig, ax = plt.subplots(figsize=(10, 9))
         
-        # 使用 Seaborn 绘制热力图
-        sns.heatmap(cm_norm, annot=True, fmt='.2%', cmap='Blues', cbar=False,
+        # 使用 Seaborn 绘制热力图 - 数值越高颜色越深
+        # 使用 YlOrRd 颜色映射（黄→橙→红，颜色深度随数值增加）
+        sns.heatmap(cm_norm, annot=True, fmt='.2%', cmap='YlOrRd', cbar=True,
                     xticklabels=labels, yticklabels=labels, ax=ax, square=True,
-                    annot_kws={"size": 11, "weight": "bold"})
+                    annot_kws={"size": 12, "weight": "bold"},
+                    vmin=0, vmax=1,
+                    linecolor='gray', linewidths=0.5)
         
-        # 在格子中填入原始数量
+        # 在格子中填入原始数量（放在百分比下方）
         for i in range(5):
             for j in range(5):
-                text_color = "white" if cm_norm[i, j] > 0.5 else "black"
-                ax.text(j + 0.5, i + 0.7, f"({cm[i, j]})", 
-                        ha="center", va="center", color=text_color, fontsize=9)
+                # 根据归一化值决定文字颜色，确保可读性
+                text_color = "white" if cm_norm[i, j] > 0.4 else "black"
+                ax.text(j + 0.5, i + 0.65, f"n={cm[i, j]}",
+                        ha="center", va="center", color=text_color, fontsize=9, weight='normal')
         
-        ax.set_title(f"工况状态诊断混淆矩阵\n精确准确率: {acc_exact:.2%} | 模糊准确率(±1级): {acc_fuzzy:.2%}", 
+        # 凸显对角线（正确分类的格子）- 添加粗边框
+        for i in range(5):
+            rect = plt.Rectangle((i, i), 1, 1, fill=False, edgecolor='gold',
+                                linewidth=3, alpha=0.8)
+            ax.add_patch(rect)
+        
+        ax.set_title(f"工况状态诊断混淆矩阵\n精确准确率: {acc_exact:.2%} | 模糊准确率(±1级): {acc_fuzzy:.2%}",
                      fontsize=14, fontweight='bold', pad=20)
         ax.set_xlabel("预测状态 (Predicted)", fontsize=12, fontweight='bold')
         ax.set_ylabel("真实状态 (Ground Truth)", fontsize=12, fontweight='bold')
         
         # 标注方向箭头
-        ax.text(-0.5, 0.5, "← 数值偏小 (过烧侧)", rotation=90, va='center', fontsize=10, color='red')
-        ax.text(-0.5, 4.5, "数值偏大 (欠烧侧) →", rotation=90, va='center', fontsize=10, color='red')
+        ax.text(-0.8, 0.5, "← 过烧", rotation=90, va='center', fontsize=11, color='darkred', weight='bold')
+        ax.text(-0.8, 4.5, "欠烧 →", rotation=90, va='center', fontsize=11, color='darkred', weight='bold')
         
         self._savefig(fig, fname)
         # [在 visualizer.py 的 Visualizer 类中添加以下两个方法]
