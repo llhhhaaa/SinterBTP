@@ -232,6 +232,13 @@ class TrainConfig:
     exp_name: str = ""                 
     save_aux_outputs: bool = True      
     output_dir: str = field(default="") 
+    
+    # ==========================================
+    # 8) 模型与结果保存配置 (Save Options)
+    # ==========================================
+    save_model: bool = True             # 是否保存模型权重
+    save_predictions: bool = True       # 是否保存预测结果
+    save_health_data: bool = True      # 是否保存健康度计算输入数据 
 
     def __post_init__(self):
         """ 初始化后的逻辑 """

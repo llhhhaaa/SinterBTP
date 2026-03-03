@@ -40,6 +40,181 @@ from btp.health_model import HealthModel
 from btp.visualizer import Visualizer
 from btp.utils import setup_logging
 
+
+def save_model_weights(
+    model: torch.nn.Module,
+    config: TrainConfig,
+    preprocessor: DataPreprocessor,
+    save_dir: str,
+    filename: str = "model.pt"
+) -> str:
+    """
+    保存模型权重、配置和预处理器元数据
+    
+    Args:
+        model: 训练好的模型
+        config: 训练配置
+        preprocessor: 数据预处理器
+        save_dir: 保存目录
+        filename: 模型文件名
+        
+    Returns:
+        保存的模型文件路径
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    model_path = os.path.join(save_dir, filename)
+    
+    # 保存模型权重
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'model_type': getattr(config, 'model_type', 'enhanced_transformer'),
+        'config': config.to_dict(),
+    }, model_path)
+    
+    # 保存预处理器元数据
+    preprocessor_meta_path = os.path.join(save_dir, "preprocessor_meta")
+    preprocessor.save(preprocessor_meta_path)
+    
+    logging.info(f"  💾 [Save] 模型权重已保存至: {model_path}")
+    logging.info(f"  💾 [Save] 预处理器元数据已保存至: {preprocessor_meta_path}")
+    
+    return model_path
+
+
+def save_predictions_csv(
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+    timestamps: np.ndarray = None,
+    save_dir: str = "",
+    filename: str = "predictions.csv"
+) -> str:
+    """
+    保存预测结果到CSV文件
+    
+    Args:
+        y_pred: 预测分位数数组，形状 (N, 5) 或 (N, T, 5)
+        y_true: 真实值数组，形状 (N,) 或 (N, 5)
+        timestamps: 时间戳数组，可选
+        save_dir: 保存目录
+        filename: 文件名
+        
+    Returns:
+        保存的CSV文件路径
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    filepath = os.path.join(save_dir, filename)
+    
+    # 处理多维预测结果
+    if y_pred.ndim == 3:
+        # 取最后一步
+        y_pred_last = y_pred[:, -1, :]
+    else:
+        y_pred_last = y_pred
+    
+    # 处理真实值
+    if y_true.ndim == 2 and y_true.shape[1] == 5:
+        y_true_vals = y_true[:, 2]  # 取 Q50 作为真实值
+    else:
+        y_true_vals = y_true.flatten()
+    
+    n_samples = len(y_pred_last)
+    
+    # 构建DataFrame
+    data = {
+        'sample_idx': np.arange(n_samples),
+        'y_true': y_true_vals,
+        'Q10': y_pred_last[:, 0],
+        'Q25': y_pred_last[:, 1],
+        'Q50': y_pred_last[:, 2],
+        'Q75': y_pred_last[:, 3],
+        'Q90': y_pred_last[:, 4],
+        'interval_lower': y_pred_last[:, 0],  # Q10 作为区间下界
+        'interval_upper': y_pred_last[:, 4],   # Q90 作为区间上界
+        'interval_width': y_pred_last[:, 4] - y_pred_last[:, 0],
+    }
+    
+    # 添加时间戳（如果有）
+    if timestamps is not None:
+        if len(timestamps) == n_samples:
+            data['timestamp'] = timestamps
+    
+    df = pd.DataFrame(data)
+    df.to_csv(filepath, index=False, encoding='utf-8')
+    
+    logging.info(f"  💾 [Save] 预测结果已保存至: {filepath} (共 {n_samples} 条记录)")
+    
+    return filepath
+
+
+def save_health_input_csv(
+    y_pred: np.ndarray,
+    y_true: np.ndarray,
+    anchor: np.ndarray,
+    config: TrainConfig,
+    timestamps: np.ndarray = None,
+    save_dir: str = "",
+    filename: str = "health_input.csv"
+) -> str:
+    """
+    保存健康度计算所需的完整数据
+    
+    Args:
+        y_pred: 预测分位数数组，形状 (N, 5) 或 (N, T, 5)
+        y_true: 真实值数组
+        anchor: 锚点值数组
+        config: 训练配置（包含健康度参数）
+        timestamps: 时间戳数组，可选
+        save_dir: 保存目录
+        filename: 文件名
+        
+    Returns:
+        保存的CSV文件路径
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    filepath = os.path.join(save_dir, filename)
+    
+    # 处理多维预测结果
+    if y_pred.ndim == 3:
+        y_pred_last = y_pred[:, -1, :]
+    else:
+        y_pred_last = y_pred
+    
+    # 处理真实值
+    if y_true.ndim == 2 and y_true.shape[1] == 5:
+        y_true_vals = y_true[:, 2]
+    else:
+        y_true_vals = y_true.flatten()
+    
+    n_samples = len(y_pred_last)
+    
+    # 构建数据字典
+    data = {
+        'sample_idx': np.arange(n_samples),
+        'y_true': y_true_vals,
+        'Q10': y_pred_last[:, 0],
+        'Q25': y_pred_last[:, 1],
+        'Q50': y_pred_last[:, 2],
+        'Q75': y_pred_last[:, 3],
+        'Q90': y_pred_last[:, 4],
+        'anchor': anchor.flatten() if anchor is not None else np.zeros(n_samples),
+        'btp_L_low': np.full(n_samples, config.btp_L_low),
+        'btp_L_r': np.full(n_samples, config.btp_L_r),
+        'btp_L_up': np.full(n_samples, config.btp_L_up),
+        'health_mu': np.full(n_samples, config.health_mu),
+    }
+    
+    # 添加时间戳（如果有）
+    if timestamps is not None:
+        if len(timestamps) == n_samples:
+            data['timestamp'] = timestamps
+    
+    df = pd.DataFrame(data)
+    df.to_csv(filepath, index=False, encoding='utf-8')
+    
+    logging.info(f"  💾 [Save] 健康度计算输入已保存至: {filepath} (共 {n_samples} 条记录)")
+    
+    return filepath
+
 def restore_absolute_values(
     y_scaled: np.ndarray,
     anchor: np.ndarray,
@@ -241,6 +416,18 @@ def run_full_pipeline(config: TrainConfig):
             trainer = Trainer(model, cfg_fold, device)
             trainer.train(data_dict_task, verbose=True)
             
+            # ========== 保存模型权重 ==========
+            if config.save_model:
+                models_dir = os.path.join(config.output_dir, "models")
+                model_filename = f"model_fold{fold_idx + 1}.pt"
+                save_model_weights(
+                    model=model,
+                    config=cfg_fold,
+                    preprocessor=preprocessor,
+                    save_dir=models_dir,
+                    filename=model_filename
+                )
+            
             # --- 在 TEST 集上评估（最终结果）---
             logging.info(f"  🔮 [Predict] 在独立 TEST 集上评估...")
             X_test_tensor = torch.FloatTensor(data_dict_task["X_test"]).to(device)
@@ -276,6 +463,38 @@ def run_full_pipeline(config: TrainConfig):
             metrics_raw.update({f"health_{k}": v for k, v in h_res.items() if isinstance(v, (float, int))})
 
             cv_metrics_list.append(metrics_raw)
+
+            # ========== 保存预测结果 ==========
+            if config.save_predictions:
+                predictions_dir = os.path.join(config.output_dir, "predictions")
+                pred_filename = f"predictions_fold{fold_idx + 1}.csv"
+                # 获取时间戳
+                test_timestamps = df_cv_pool["时间"].iloc[-len(y_pred_abs_last):].values if "时间" in df_cv_pool.columns else None
+                save_predictions_csv(
+                    y_pred=y_pred_abs_last,
+                    y_true=y_true_abs_tiled,
+                    timestamps=test_timestamps,
+                    save_dir=predictions_dir,
+                    filename=pred_filename
+                )
+            
+            # ========== 保存健康度计算输入数据 ==========
+            if config.save_health_data:
+                health_data_dir = os.path.join(config.output_dir, "health_data")
+                health_filename = f"health_input_fold{fold_idx + 1}.csv"
+                # 获取时间戳
+                test_timestamps = df_cv_pool["时间"].iloc[-len(y_pred_abs_last):].values if "时间" in df_cv_pool.columns else None
+                # 获取锚点值
+                anchor_test = data_dict_full["anchor_test"] if "anchor_test" in data_dict_full else np.zeros(len(y_pred_abs_last))
+                save_health_input_csv(
+                    y_pred=y_pred_abs_last,
+                    y_true=y_true_abs_tiled,
+                    anchor=anchor_test,
+                    config=cfg_fold,
+                    timestamps=test_timestamps,
+                    save_dir=health_data_dir,
+                    filename=health_filename
+                )
 
             # ── CQR 消融：在同一 fold 上跑校准版本 ──
             # [基线模型] 跳过 CQR 校准
@@ -379,6 +598,18 @@ def run_full_pipeline(config: TrainConfig):
         final_trainer = Trainer(final_model, config, device)
         final_trainer.train(train_package, verbose=True)
 
+        # ========== 保存最终模型权重 ==========
+        if config.save_model:
+            models_dir = os.path.join(config.output_dir, "models")
+            save_model_weights(
+                model=final_model,
+                config=config,
+                preprocessor=preprocessor,
+                save_dir=models_dir,
+                filename="model_best.pt"
+            )
+            logging.info(f"  💾 [Save] 最终模型已保存")
+
         # MC Dropout 多次采样平均 (最终测试)
         mc_samples = getattr(config, 'mc_samples', 30)
         preds_test_scaled = final_trainer.predict(torch.FloatTensor(X_test_input), mc_samples=mc_samples)
@@ -407,6 +638,36 @@ def run_full_pipeline(config: TrainConfig):
         # 这里假设 y_test_calib 已经是最终输出，我们需要重新计算健康度以获取 health_results
         health_model = HealthModel(config)
         health_results = health_model.analyze(y_test_calib, y_true=y_test_true_tiled)
+
+        # ========== 保存最终预测结果 ==========
+        if config.save_predictions:
+            predictions_dir = os.path.join(config.output_dir, "predictions")
+            # 获取时间戳
+            test_timestamps_final = df_full["时间"].iloc[-len(y_test_calib):].values if "时间" in df_full.columns else None
+            save_predictions_csv(
+                y_pred=y_test_calib,
+                y_true=y_test_true_tiled,
+                timestamps=test_timestamps_final,
+                save_dir=predictions_dir,
+                filename="predictions_final.csv"
+            )
+        
+        # ========== 保存最终健康度计算输入数据 ==========
+        if config.save_health_data:
+            health_data_dir = os.path.join(config.output_dir, "health_data")
+            # 获取时间戳
+            test_timestamps_final = df_full["时间"].iloc[-len(y_test_calib):].values if "时间" in df_full.columns else None
+            # 获取锚点值
+            anchor_test_final = final_data["anchor_test"] if "anchor_test" in final_data else np.zeros(len(y_test_calib))
+            save_health_input_csv(
+                y_pred=y_test_calib,
+                y_true=y_test_true_tiled,
+                anchor=anchor_test_final,
+                config=config,
+                timestamps=test_timestamps_final,
+                save_dir=health_data_dir,
+                filename="health_input_final.csv"
+            )
 
         vis_final.generate_all_plots(
             y_pred=y_test_calib,
