@@ -918,27 +918,23 @@ class Visualizer:
 
     def plot_diagnosis_confusion_matrix(self, y_true_states: np.ndarray, y_pred_states: np.ndarray, fname: str):
         """
-        绘制 5分类 混淆矩阵热力图 (含模糊准确率计算)
-        States: 0:过烧, 1:疑似过烧, 2:正常, 3:疑似欠烧, 4:欠烧
+        绘制 3分类 混淆矩阵热力图
+        States: 0:过烧, 1:正常, 2:欠烧
         """
-        labels = ["过烧", "疑似过烧", "正常", "疑似欠烧", "欠烧"]
+        labels = ["过烧", "正常", "欠烧"]
         
-        # 1. 计算基础指标
-        acc_exact = accuracy_score(y_true_states, y_pred_states)
+        # 1. 计算准确率
+        acc = accuracy_score(y_true_states, y_pred_states)
         
-        # 2. 计算模糊准确率 (允许误差 ±1 级)
-        diff = np.abs(y_true_states - y_pred_states)
-        acc_fuzzy = np.mean(diff <= 1)
-        
-        # 3. 构建混淆矩阵
-        cm = confusion_matrix(y_true_states, y_pred_states, labels=[0, 1, 2, 3, 4])
+        # 2. 构建混淆矩阵 (3分类)
+        cm = confusion_matrix(y_true_states, y_pred_states, labels=[0, 1, 2])
         
         # 归一化 (按真值行归一化，显示召回率)
         # 避免除以0
         cm_norm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-10)
         
-        # 4. 绘图
-        fig, ax = plt.subplots(figsize=(10, 9))
+        # 3. 绘图
+        fig, ax = plt.subplots(figsize=(8, 7))
         
         # 使用 Seaborn 绘制热力图 - 数值越高颜色越深
         # 使用 YlOrRd 颜色映射（黄→橙→红，颜色深度随数值增加）
@@ -949,27 +945,27 @@ class Visualizer:
                     linecolor='gray', linewidths=0.5)
         
         # 在格子中填入原始数量（放在百分比下方）
-        for i in range(5):
-            for j in range(5):
+        for i in range(3):
+            for j in range(3):
                 # 根据归一化值决定文字颜色，确保可读性
                 text_color = "white" if cm_norm[i, j] > 0.4 else "black"
                 ax.text(j + 0.5, i + 0.65, f"n={cm[i, j]}",
                         ha="center", va="center", color=text_color, fontsize=9, weight='normal')
         
         # 凸显对角线（正确分类的格子）- 添加粗边框
-        for i in range(5):
+        for i in range(3):
             rect = plt.Rectangle((i, i), 1, 1, fill=False, edgecolor='gold',
                                 linewidth=3, alpha=0.8)
             ax.add_patch(rect)
         
-        ax.set_title(f"工况状态诊断混淆矩阵\n精确准确率: {acc_exact:.2%} | 模糊准确率(±1级): {acc_fuzzy:.2%}",
+        ax.set_title(f"工况状态诊断混淆矩阵 (3分类)\n准确率: {acc:.2%}",
                      fontsize=14, fontweight='bold', pad=20)
         ax.set_xlabel("预测状态 (Predicted)", fontsize=12, fontweight='bold')
         ax.set_ylabel("真实状态 (Ground Truth)", fontsize=12, fontweight='bold')
         
         # 标注方向箭头
-        ax.text(-0.8, 0.5, "← 过烧", rotation=90, va='center', fontsize=11, color='darkred', weight='bold')
-        ax.text(-0.8, 4.5, "欠烧 →", rotation=90, va='center', fontsize=11, color='darkred', weight='bold')
+        ax.text(-0.6, 0.5, "← 过烧", rotation=90, va='center', fontsize=11, color='darkred', weight='bold')
+        ax.text(-0.6, 2.5, "欠烧 →", rotation=90, va='center', fontsize=11, color='darkred', weight='bold')
         
         self._savefig(fig, fname)
         # [在 visualizer.py 的 Visualizer 类中添加以下两个方法]

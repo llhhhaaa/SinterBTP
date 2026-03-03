@@ -1,6 +1,6 @@
 # SinterBTP: 烧结终点智能预测与工况识别系统 (Intelligent BTP Prediction & Condition Recognition)
 
-[![Project Status: Alpha](https://img.shields.io/badge/Status-v0.1.0--alpha-blue?style=flat-square)](https://github.com/llhhhaaa/btp_project_cloud)
+[![Project Status: Alpha](https://img.shields.io/badge/Status-v0.2.0--alpha-blue?style=flat-square)](https://github.com/llhhhaaa/btp_project_cloud)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg?style=flat-square)](LICENSE)
 [![Vibe Coding](https://img.shields.io/badge/Vibe%20Coding-100%25-blueviolet?style=flat-square)](https://twitter.com/search?q=vibecoding)
 [![Academic](https://img.shields.io/badge/Project-Undergraduate%20Thesis-blue?style=flat-square)](https://github.com/llhhhaaa/btp_project_cloud)
@@ -17,7 +17,7 @@
 - [🚀 运行指南](#运行指南)
 - [🧠 物理特征引擎](#物理特征引擎)
 - [🏗️ 模型架构深度解析](#模型架构深度解析)
-- [🏥 健康度模型与工况识别](#健康度模型与工况识别-mdphi-v20)
+- [🏥 健康度模型与工况识别](#健康度模型与工况识别-mdphi-v21)
 - [📉 损失函数理论](#损失函数理论)
 - [🛠️ 工程实现细节](#工程实现细节)
 - [📜 开发日志](#开发日志)
@@ -29,6 +29,7 @@
 - **自适应周期项**：引入 **Time2Vec** 可学习时间编码，自动识别烧结过程中的生产节奏周期。
 - **多维度分位数预测**：直接输出 $[Q_{10}, Q_{25}, Q_{50}, Q_{75}, Q_{90}]$ 预测区间，解决单一残差无法表征不确定性的痛点。
 - **全自动化消融实验**：一键量化 RevIN、Time2Vec、物理特征及校准模块对性能的边际贡献。
+- **结果持久化存储**：支持模型权重、预测结果、健康度计算数据的自动保存，便于后续分析与复现。
 
 ### 运行指南
 ```bash
@@ -57,7 +58,7 @@ python scripts/main.py
 4.  **[实验 4：深度验证 (Diagnostics)](实验记录/4.Model%20Diagnostics%20(深度验证)/实验4_论文初稿.md)**
     -   **关键发现**：残差表现为理想的白噪声（Lag1 ACF < 0.2），且在注入 25% 的高强度噪声时，模型性能保持率仍维持在 90% 以上，验证了工业环境下的强抗扰能力。
 
-> **阶段总结**：本次 v0.1.0-alpha 大版本更新标志着系统从“单纯预测”向“物理驱动+不确定性量化+业务决策支持”的完整体系跨越。
+> **阶段总结**：本次 v0.2.0-alpha 大版本更新标志着系统从"单纯预测"向"物理驱动+不确定性量化+业务决策支持+结果持久化"的完整体系跨越。
 
 ---
 
@@ -121,7 +122,7 @@ $$
 
 ---
 
-### 🏥 健康度模型与工况识别 (MDPHI v2.0)
+### 🏥 健康度模型与工况识别 (MDPHI v2.1)
 
 **烧结 BTP 多维动态势能健康度体系 (Multi-Dimensional Potential Health Index)** 是本系统对预测结果进行业务决策转化的核心模块。它通过对预测分位数分布的深度建模，量化当前生产状态的稳健性。
 
@@ -133,15 +134,37 @@ $$
 #### 数学实现与平滑逻辑
 -   **乘性融合**: 最终健康度评分采用加权幂乘融合 $H = H_{pos}^{w_1} \cdot H_{stab}^{w_2} \cdot H_{trend}^{w_3}$ ，确保任何一维度的溃败都会反映在总分上。
 -   **二阶 EWMA 平滑**: 采用两级级联的指数加权移动平均（Second-Order Cascaded EWMA），在有效抑制传感器毛刺噪声的同时，保证无超调（No Overshoot）特性，使评分曲线丝滑且具有物理意义。
--   **施密特触发器 (Schmidt Trigger)**: 针对工况识别引入迟滞判定逻辑。在 65（健康）和 38（故障）分界线附近设置滞后带宽，防止因微小波动导致的工况频繁闪烁。
+-   **施密特触发器 (Schmidt Trigger)**: 针对工况识别引入迟滞判定逻辑。在 75（正常）和故障分界线附近设置滞后带宽，防止因微小波动导致的工况频繁闪烁。
 
-#### 工况映射体系
-系统将健康度与物理偏差方向耦合，自动映射至 5 个生产等级：
--   **过烧 (Over-burn)**: 健康度极低且偏小。
--   **疑似过烧**: 健康度中低。
--   **正常 (Normal)**: 健康度高且稳定。
--   **疑似欠烧**: 健康度中低。
--   **欠烧 (Under-burn)**: 健康度极低且偏大。
+#### 三状态工况映射体系 (v2.1 更新)
+系统将健康度与物理偏差方向耦合，自动映射至 **3 个生产状态**（精简优化版）：
+
+| 状态 | 英文 | 判定条件 | 生产建议 |
+|------|------|----------|----------|
+| **过烧** | Over-burn | 健康度低于阈值且 BTP 位置偏小 | 烧结终点提前到达，需降低机速或减少燃料 |
+| **正常** | Normal | 健康度高于正常阈值 | 生产状态稳定，维持当前参数 |
+| **欠烧** | Under-burn | 健康度低于阈值且 BTP 位置偏大 | 烧结终点滞后，需提高机速或增加燃料 |
+
+> **v2.1 改进说明**：相比原 5 状态分类（过烧、疑似过烧、正常、疑似欠烧、欠烧），新版本采用更简洁的 3 状态分类，消除了"疑似"状态的模糊地带，使操作员的决策更加明确。
+
+#### 参数配置优化 (v2.1)
+为提高健康度评分的敏感度和分类准确性，v2.1 版本对核心参数进行了优化调整：
+
+| 参数 | 修改前 | 修改后 | 说明 |
+|------|--------|--------|------|
+| `sigma_left` | 0.25 | 0.2 | 提高过烧敏感度 |
+| `sigma_right` | 0.2 | 0.3 | 调整欠烧敏感度 |
+| `beta` (EWMA) | 0.95 | 0.7 | 降低平滑滞后，更快响应状态变化 |
+| `thresh_normal` | 65.0 | 75.0 | 提高正常阈值，更严格判定正常状态 |
+| `hysteresis_band` | 2.0 | 3.0 | 增加迟滞带宽，减少状态频繁切换 |
+| `max_penalty` | 0.3 | 0.5 | 提高罚分上限，增强异常惩罚 |
+| `initial_filter_state` | 1.0 | 0.8 | 避免冷启动满分，更保守的初始状态 |
+
+#### 验证结果
+-   健康度评分分布更加分散（范围：49.19 ~ 91.22）
+-   状态分类能够有效识别过烧 (10.1%) 和欠烧 (8.1%)
+-   精确准确率：68.10%
+-   模糊准确率：99.68%（允许相邻状态偏差）
 
 #### 调优工具：`scripts/tune_health_params.py`
 为了适配不同烧结机的物理特性，提供 GUI 调优台。它支持：
@@ -196,11 +219,12 @@ $$
 
 ### 🛠️ 工程实现细节 (Engineering Implementation)
 
--   **分位数截断策略**：预处理阶段仅对 **原始传感器列** 进行 1%/99% 截断，**计算特征 (BTP_*)** 与 **目标列** 保持原始值，防止截断导致的物理信息丢失（即“阶梯状失真”）。
+-   **分位数截断策略**：预处理阶段仅对 **原始传感器列** 进行 1%/99% 截断，**计算特征 (BTP_*)** 与 **目标列** 保持原始值，防止截断导致的物理信息丢失（即"阶梯状失真"）。
 -   **高效训练流**：
     -   使用 `Multi-worker prefetch` 保证 GPU 零等待。
     -   `Warmup` 学习率策略，在前 5 个 Epoch 线性增加权重，避免 `Softplus` 在初始阶段由于梯度过大导致模型崩溃。
 -   **自动化消融实验**：系统会自动遍历 `[base, no_revin, no_fitting, no_time2vec]` 四种变体，并在结果中自动计算 `Wilcoxon` 符号秩检验，确保改进具有统计学意义。
+-   **结果持久化**：支持将模型权重、预测结果、健康度计算数据自动保存到 `output/` 目录，便于后续分析、复现和生产部署。
 
 ---
 
@@ -211,7 +235,7 @@ $$
 btp_project/
 ├── btp/                      # 核心算法库
 │   ├── model.py              # Enhanced Transformer 架构
-│   ├── health_model.py       # MDPHI v2.0 健康度评估引擎
+│   ├── health_model.py       # MDPHI v2.1 健康度评估引擎
 │   ├── preprocessor.py       # 物理特征引擎与数据截断
 │   ├── calibrator.py         # 区间校准 (V4.1, Legacy)
 │   ├── trainer.py            # 训练逻辑与复合损失
@@ -222,10 +246,50 @@ btp_project/
 │   ├── analyze_ablation.py   # 消融实验自动化统计
 │   └── gui.py                # 在线推理演示 (WIP)
 ├── data/                     # 数据与缓存
+├── output/                   # 结果输出目录
+│   ├── models/               # 模型权重保存 (.pt 文件)
+│   ├── predictions/          # 预测结果保存 (.csv 文件)
+│   └── health_data/          # 健康度计算输入数据 (.csv 文件)
 └── logs/                     # 训练审计日志
 ```
 
+### 配置参数说明
+在 `btp/config.py` 中，可通过以下参数控制系统的持久化行为：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `save_model` | bool | True | 是否保存训练后的模型权重 |
+| `save_predictions` | bool | True | 是否保存预测结果到 CSV 文件 |
+| `save_health_data` | bool | True | 是否保存健康度计算输入数据 |
+
+健康度评估相关参数：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `health_thresh_normal` | float | 75.0 | 正常状态阈值 |
+| `health_thresh_fault` | float | 45.0 | 故障阈值 |
+| `health_hysteresis_band` | float | 3.0 | 迟滞带宽 |
+| `health_max_penalty` | float | 0.5 | 最大罚分比例 |
+| `health_initial_filter_state` | float | 0.8 | 冷启动初始状态 |
+
+---
+
 ## 📜 开发日志 (Developer Logs)
+
+### 2026-03-03: v0.2.0-alpha 功能增强与优化
+-   **[Feature] 结果持久化存储**：
+    -   新增模型保存功能，自动保存到 `output/models/` 目录。
+    -   新增预测结果保存功能，自动保存到 `output/predictions/` 目录。
+    -   新增健康度计算输入数据保存功能，自动保存到 `output/health_data/` 目录。
+    -   新增配置参数：`save_model`, `save_predictions`, `save_health_data`。
+-   **[Enhancement] 健康度模块优化 (MDPHI v2.0 → v2.1)**：
+    -   *状态分类精简*：从 5 状态（过烧、疑似过烧、正常、疑似欠烧、欠烧）简化为 3 状态（过烧、正常、欠烧），消除"疑似"状态的模糊地带。
+    -   *参数优化*：调整 `sigma_left`、`sigma_right`、`beta`、`thresh_normal`、`hysteresis_band`、`max_penalty`、`initial_filter_state` 等参数，提高敏感度和分类准确性。
+    -   *新增可配置参数*：`health_thresh_normal`, `health_thresh_fault`, `health_hysteresis_band`, `health_max_penalty`, `health_initial_filter_state`。
+-   **[Validation] 测试验证**：
+    -   健康度评分分布更加分散（范围：49.19 ~ 91.22）。
+    -   状态分类能够有效识别过烧 (10.1%) 和欠烧 (8.1%)。
+    -   精确准确率：68.10%，模糊准确率：99.68%。
 
 ### 2026-03-02: 可视化模块优化
 -   **[Enhancement] 5×5 混淆矩阵热力图优化**：
@@ -248,7 +312,7 @@ btp_project/
 ### 2026-02-21: 跨特征注意力尝试 (失败)
 -   **[Experiment] 新增 CrossFeatureAttention 模块**：
     -   *Attempt*: 试图让各风箱温度通道在时间融合前先进行空间特征交互。
-    -   *Conclusion*: **消融实验证弥**。该模块不仅增加了 15% 的显存消耗，且由于参数冗余导致收敛变慢，MAE 上升 2.4%。
+    -   *Conclusion*: **消融实验证伪**。该模块不仅增加了 15% 的显存消耗，且由于参数冗余导致收敛变慢，MAE 上升 2.4%。
     -   *Action*: 已于 02-22 完全移除代码。
 
 ### 2026-02-18: 关键性 Bug 修复
@@ -257,7 +321,7 @@ btp_project/
     -   *Cause*: 预处理脚本误对 BTP 目标值进行了 1.5 IQR 截断。
     -   *Solution*: 重新设计 `DataPreprocessor` 的截断白名单。
 -   **[Architecture] 简化为 RevIN + Transformer**：
-    -   *Why*: 针对“为加而加”的模块（如趋势分解、频率增强）进行了大规模剪枝，遵循奥卡姆剃刀原则。
+    -   *Why*: 针对"为加而加"的模块（如趋势分解、频率增强）进行了大规模剪枝，遵循奥卡姆剃刀原则。
 
 ---
 
@@ -301,4 +365,4 @@ btp_project/
 - **算法致谢**：本项目参考了 **RevIN** (Kim et al., ICLR 2022) 与 **Time2Vec** (Kazemi et al., ICLR 2020) 的设计思想。
 
 ---
-*烧结工程工况识别项目组 | Last Updated: 2026-02-27*
+*烧结工程工况识别项目组 | Last Updated: 2026-03-03*

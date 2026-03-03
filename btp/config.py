@@ -212,16 +212,25 @@ class TrainConfig:
     exceed_enter_eps: float = 0.05     
     exceed_exit_eps: float = 0.03      
     
-    health_mu: float = 22.56           
-    health_sigma_left: float = 0.25    
-    health_sigma_right: float = 0.2    
-    health_sigma_limit: float = 0.15   
-    health_k_stab: float = 2.0         
-    health_alpha_trend: float = 2      
-    health_W_pos: float = 2.79         
-    health_W_stab: float = 1.46        
-    health_W_trend: float = 2          
-    health_beta_ewma: float = 0.95     
+    health_mu: float = 22.56
+    health_sigma_left: float = 0.18    # 提高对过烧方向的敏感度 (调整自0.2)
+    health_sigma_right: float = 0.25   # 提高对欠烧方向的敏感度 (调整自0.3)
+    health_sigma_limit: float = 0.15
+    health_k_stab: float = 2.0
+    health_alpha_trend: float = 2
+    health_W_pos: float = 2.79
+    health_W_stab: float = 1.2         # 增加稳定性权重 (调整自1.0)
+    health_W_trend: float = 2
+    health_beta_ewma: float = 0.85     # 增大EWMA平滑系数，更好地跟随真实健康度变化 (调整自0.7)
+    
+    # ==========================================
+    # 6.1) 健康度状态判定参数 (可配置)
+    # ==========================================
+    health_thresh_normal: float = 70.0      # 正常状态阈值 (调整自75.0)
+    health_thresh_fault: float = 50.0       # 故障/异常阈值 (保留用于参考，原值38.0)
+    health_hysteresis_band: float = 5.0     # 迟滞带宽，防止状态闪烁 (调整自3.0)
+    health_max_penalty: float = 0.5         # 区间宽度的罚分上限 (原值0.3)
+    health_initial_filter_state: float = 0.8  # 冷启动初始滤波状态 (原值1.0)
     
     
     enable_delta_forecast: bool = 0    # 是否预测"变化量"(Delta)
