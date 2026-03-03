@@ -36,7 +36,7 @@ class TrainConfig:
     # ==========================================
     raw_seq_len: int = 720             # 原始高频序列长度 (EnhancedTransformer 输入)
     
-    USE_DATA_CACHE: bool = True        # 是否使用数据缓存
+    USE_DATA_CACHE: bool = False        # 是否使用数据缓存
     CACHE_DIR: str = "data/cache"      # 缓存目录
     PREGENERATE_ONLY: bool = False     # 是否仅运行预生成逻辑
     enable_cv: bool = False                # 是否开启交叉验证 (1为开启, 0为关闭)
@@ -189,8 +189,8 @@ class TrainConfig:
     # ==========================================
     # 6) 业务逻辑：BTP阈值与健康度算法
     # ==========================================
-    btp_L_low: float = 22.44           
-    btp_L_r: float = 22.56             
+    btp_L_low: float = 22.40           
+    btp_L_r: float = 22.55             
     btp_L_up: float = 22.7             
 
     h_normal_min: float = 0.6          

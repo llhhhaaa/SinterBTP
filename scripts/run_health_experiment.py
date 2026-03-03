@@ -178,13 +178,22 @@ def run_health_model_experiment(config: TrainConfig, output_dir: str):
     os.makedirs(vis_dir, exist_ok=True)
     visualizer = Visualizer(vis_dir, config)
     
-    # 7.1 混淆矩阵
+    # 7.1 混淆矩阵 (同时生成 2D 和 3D 版本)
     if 'true_states' in health_results and 'pred_states' in health_results:
-        logging.info("  生成混淆矩阵...")
+        logging.info("  生成混淆矩阵 (2D + 3D)...")
+        # 2D 热力图版本
         visualizer.plot_diagnosis_confusion_matrix(
             y_true_states=health_results['true_states'],
             y_pred_states=health_results['pred_states'],
-            fname="health_confusion_matrix.png"
+            fname="health_confusion_matrix_2d.png",
+            mode='2d'
+        )
+        # 3D 柱状图版本
+        visualizer.plot_diagnosis_confusion_matrix(
+            y_true_states=health_results['true_states'],
+            y_pred_states=health_results['pred_states'],
+            fname="health_confusion_matrix_3d.png",
+            mode='3d'
         )
     
     # 7.2 健康度曲线图

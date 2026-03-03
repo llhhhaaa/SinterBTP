@@ -681,12 +681,21 @@ def run_full_pipeline(config: TrainConfig):
             prefix="final_test"
         )
         
-        # 2. [新增] 专门调用混淆矩阵绘制
+        # 2. [新增] 专门调用混淆矩阵绘制 (同时生成 2D 和 3D 版本)
         if 'true_states' in health_results:
+            # 2D 热力图版本
             vis_final.plot_diagnosis_confusion_matrix(
                 y_true_states=health_results['true_states'],
                 y_pred_states=health_results['pred_states'],
-                fname="final_test_diagnosis_confusion_matrix.png"
+                fname="final_test_diagnosis_confusion_matrix_2d.png",
+                mode='2d'
+            )
+            # 3D 柱状图版本
+            vis_final.plot_diagnosis_confusion_matrix(
+                y_true_states=health_results['true_states'],
+                y_pred_states=health_results['pred_states'],
+                fname="final_test_diagnosis_confusion_matrix_3d.png",
+                mode='3d'
             )
 
         # ==========================================

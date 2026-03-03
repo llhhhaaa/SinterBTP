@@ -35,7 +35,7 @@ from matplotlib import font_manager
 import seaborn as sns
 from scipy.stats import pearsonr
 from sklearn.metrics import confusion_matrix, accuracy_score
-import seaborn as sns
+from mpl_toolkits.mplot3d import Axes3D  # 3D 绘图支持
 import pandas as pd
 from scipy.stats import norm
 # =========================================================
@@ -916,10 +916,62 @@ class Visualizer:
         plt.tight_layout()
         self._savefig(fig, fname)
 
-    def plot_diagnosis_confusion_matrix(self, y_true_states: np.ndarray, y_pred_states: np.ndarray, fname: str):
+    def plot_diagnosis_confusion_matrix_2d(self, y_true_states: np.ndarray, y_pred_states: np.ndarray, fname: str):
         """
-        绘制 3分类 混淆矩阵热力图
+        绘制 3分类 混淆矩阵 2D 热力图
         States: 0:过烧, 1:正常, 2:欠烧
+        使用原始数量进行颜色着色
+        """
+        labels = ["过烧", "正常", "欠烧"]
+        
+        # 1. 计算准确率
+        acc = accuracy_score(y_true_states, y_pred_states)
+        
+        # 2. 构建混淆矩阵 (3分类)
+        cm = confusion_matrix(y_true_states, y_pred_states, labels=[0, 1, 2])
+        
+        # 归一化 (按真值行归一化，显示召回率)
+        cm_norm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-10)
+        
+        # 3. 创建 2D 热力图
+        fig, ax = plt.subplots(figsize=(10, 8))
+        
+        # 使用原始数量进行颜色映射
+        im = ax.imshow(cm, cmap='Blues', aspect='auto')
+        
+        # 设置坐标轴标签
+        ax.set_xticks(range(3))
+        ax.set_xticklabels(labels, fontsize=12)
+        ax.set_yticks(range(3))
+        ax.set_yticklabels(labels, fontsize=12)
+        
+        # 在每个格子中标注百分比和数量
+        for i in range(3):
+            for j in range(3):
+                # 根据背景颜色选择文字颜色
+                text_color = "white" if cm[i, j] > cm.max() * 0.5 else "black"
+                text = f"{cm_norm[i, j]:.1%}\n(n={cm[i, j]})"
+                ax.text(j, i, text, ha="center", va="center",
+                       color=text_color, fontsize=11, fontweight='bold')
+        
+        # 添加颜色条
+        cbar = plt.colorbar(im, ax=ax, shrink=0.8)
+        cbar.set_label('样本数量', fontsize=11, fontweight='bold')
+        
+        # 设置标题和轴标签
+        ax.set_xlabel('预测状态 (Predicted)', fontsize=12, fontweight='bold')
+        ax.set_ylabel('真实状态 (Ground Truth)', fontsize=12, fontweight='bold')
+        ax.set_title(f"工况状态诊断混淆矩阵 (2D热力图)\n准确率: {acc:.2%}",
+                    fontsize=14, fontweight='bold', pad=15)
+        
+        plt.tight_layout()
+        self._savefig(fig, fname)
+
+    def plot_diagnosis_confusion_matrix_3d(self, y_true_states: np.ndarray, y_pred_states: np.ndarray, fname: str):
+        """
+        绘制 3分类 混淆矩阵三维柱状图
+        States: 0:过烧, 1:正常, 2:欠烧
+        柱子高度 = 样本数量，颜色渐变表示数量大小
         """
         labels = ["过烧", "正常", "欠烧"]
         
@@ -933,44 +985,108 @@ class Visualizer:
         # 避免除以0
         cm_norm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-10)
         
-        # 3. 绘图
-        fig, ax = plt.subplots(figsize=(8, 7))
+        # 3. 创建 3D 图形
+        fig = plt.figure(figsize=(12, 10))
+        ax = fig.add_subplot(111, projection='3d')
         
-        # 使用 Seaborn 绘制热力图 - 数值越高颜色越深
-        # 使用 YlOrRd 颜色映射（黄→橙→红，颜色深度随数值增加）
-        sns.heatmap(cm_norm, annot=True, fmt='.2%', cmap='YlOrRd', cbar=True,
-                    xticklabels=labels, yticklabels=labels, ax=ax, square=True,
-                    annot_kws={"size": 12, "weight": "bold"},
-                    vmin=0, vmax=1,
-                    linecolor='gray', linewidths=0.5)
+        # 设置坐标轴位置
+        x_positions = np.arange(3)  # X轴: 预测状态
+        y_positions = np.arange(3)  # Y轴: 真实状态
         
-        # 在格子中填入原始数量（放在百分比下方）
+        # 创建网格
+        x_grid, y_grid = np.meshgrid(x_positions, y_positions)
+        x_flat = x_grid.flatten()
+        y_flat = y_grid.flatten()
+        z_flat = np.zeros_like(x_flat, dtype=float)  # 柱子底部
+        
+        # 柱子高度 = 样本数量
+        heights = cm.flatten().astype(float)
+        
+        # 颜色映射：根据高度（数量）设置颜色
+        # 使用 YlOrRd (黄-橙-红) 渐变
+        max_height = max(heights.max(), 1)  # 避免除以0
+        normalized_heights = heights / max_height
+        
+        # 使用 Reds 颜色映射
+        from matplotlib import cm as mpl_cm
+        colors = mpl_cm.Reds(normalized_heights * 0.8 + 0.2)  # 避免颜色太浅
+        
+        # 绘制 3D 柱状图
+        dx = dy = 0.6  # 柱子宽度和深度
+        bars = ax.bar3d(x_flat - dx/2, y_flat - dy/2, z_flat, dx, dy, heights,
+                       color=colors, shade=True, alpha=0.9)
+        
+        # 4. 在柱子上方标注百分比和数量
         for i in range(3):
             for j in range(3):
-                # 根据归一化值决定文字颜色，确保可读性
-                text_color = "white" if cm_norm[i, j] > 0.4 else "black"
-                ax.text(j + 0.5, i + 0.65, f"n={cm[i, j]}",
-                        ha="center", va="center", color=text_color, fontsize=9, weight='normal')
+                x_pos = j
+                y_pos = i
+                z_pos = cm[i, j]
+                
+                # 标注文本
+                text = f"{cm_norm[i, j]:.1%}\n(n={cm[i, j]})"
+                ax.text(x_pos, y_pos, z_pos + max_height * 0.05, text,
+                       ha='center', va='bottom', fontsize=9, fontweight='bold',
+                       color='darkred')
         
-        # 凸显对角线（正确分类的格子）- 添加粗边框
-        for i in range(3):
-            rect = plt.Rectangle((i, i), 1, 1, fill=False, edgecolor='gold',
-                                linewidth=3, alpha=0.8)
-            ax.add_patch(rect)
+        # 5. 设置坐标轴标签
+        ax.set_xlabel('\n预测状态 (Predicted)', fontsize=12, fontweight='bold', labelpad=10)
+        ax.set_ylabel('\n真实状态 (Ground Truth)', fontsize=12, fontweight='bold', labelpad=10)
+        ax.set_zlabel('样本数量', fontsize=12, fontweight='bold', labelpad=10)
         
+        # 设置刻度标签
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels(labels, fontsize=10)
+        ax.set_yticks(y_positions)
+        ax.set_yticklabels(labels, fontsize=10)
+        
+        # 设置 Z 轴范围
+        ax.set_zlim(0, max_height * 1.2)
+        
+        # 设置视角 (azim=-45 使过烧对角线位于视觉中心前方，elev=30 俯视效果更好)
+        ax.view_init(elev=30, azim=-45)
+        
+        # 标题
         ax.set_title(f"工况状态诊断混淆矩阵 (3分类)\n准确率: {acc:.2%}",
-                     fontsize=14, fontweight='bold', pad=20)
-        ax.set_xlabel("预测状态 (Predicted)", fontsize=12, fontweight='bold')
-        ax.set_ylabel("真实状态 (Ground Truth)", fontsize=12, fontweight='bold')
+                    fontsize=14, fontweight='bold', pad=20)
         
-        # 标注方向箭头
-        ax.text(-0.6, 0.5, "← 过烧", rotation=90, va='center', fontsize=11, color='darkred', weight='bold')
-        ax.text(-0.6, 2.5, "欠烧 →", rotation=90, va='center', fontsize=11, color='darkred', weight='bold')
+        # 添加颜色条
+        mappable = mpl_cm.ScalarMappable(cmap='Reds', norm=plt.Normalize(0, max_height))
+        mappable.set_array(heights)
+        cbar = fig.colorbar(mappable, ax=ax, shrink=0.6, aspect=10, pad=0.1)
+        cbar.set_label('样本数量', fontsize=11, fontweight='bold')
         
+        # 注意：3D 图形不建议使用 tight_layout
         self._savefig(fig, fname)
-        # [在 visualizer.py 的 Visualizer 类中添加以下两个方法]
 
-    def plot_btp_health_panorama(self, y_true: np.ndarray, y_pred: np.ndarray, 
+    def plot_diagnosis_confusion_matrix(self, y_true_states: np.ndarray, y_pred_states: np.ndarray,
+                                        fname: str, mode: str = '2d'):
+        """
+        绘制 3分类 混淆矩阵 (兼容性包装函数)
+        
+        Args:
+            y_true_states: 真实状态标签 (0:过烧, 1:正常, 2:欠烧)
+            y_pred_states: 预测状态标签
+            fname: 保存文件名
+            mode: '2d' 使用热力图, '3d' 使用三维柱状图
+        
+        Usage:
+            # 使用 2D 热力图 (默认)
+            viz.plot_diagnosis_confusion_matrix(y_true, y_pred, "confusion_2d.png")
+            
+            # 使用 3D 柱状图
+            viz.plot_diagnosis_confusion_matrix(y_true, y_pred, "confusion_3d.png", mode='3d')
+            
+            # 或者直接调用具体函数
+            viz.plot_diagnosis_confusion_matrix_2d(y_true, y_pred, "confusion_2d.png")
+            viz.plot_diagnosis_confusion_matrix_3d(y_true, y_pred, "confusion_3d.png")
+        """
+        if mode == '3d':
+            self.plot_diagnosis_confusion_matrix_3d(y_true_states, y_pred_states, fname)
+        else:
+            self.plot_diagnosis_confusion_matrix_2d(y_true_states, y_pred_states, fname)
+
+    def plot_btp_health_panorama(self, y_true: np.ndarray, y_pred: np.ndarray,
                                  health_res: Dict, fname: str, 
                                  mu: float = 22.6):
         """
