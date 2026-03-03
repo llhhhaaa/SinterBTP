@@ -113,7 +113,8 @@ btp_project/
 │   └── visualizer.py         # 预测结果与健康度深度可视化
 ├── scripts/                  # 运行与自动化脚本
 │   ├── main.py               # 生产/实验统一入口 (含结果持久化逻辑)
-│   ├── tune_health_params.py # 健康度模型交互式调优台 (GUI)
+│   ├── tune_health_params.py # 健康度模型交互式调优台 (GUI, 旧版)
+│   ├── interactive_health_tuner.py # [v0.1.2 新增] 交互式健康度参数调优器 (实时绘图)
 │   ├── run_ablation.py       # 自动化消融实验调度
 │   └── analyze_results.py    # 实验结果统计分析
 ├── output/                   # [v0.1.1 新增] 持久化输出目录
@@ -135,7 +136,14 @@ btp_project/
 - **核心成果**: 在 v0.1.0 实验闭环基础上，新增结果持久化功能，优化健康度模型为3状态分类，验证结果：精确准确率 68.10%，模糊准确率 99.68%。
 
 ### 4.2 重构历程 (Major Refactorings)
-- **2026-03-03 [Current]**:
+- **2026-03-03 [Current - 下午更新]**:
+    - **新增交互式健康度调优工具**: [`scripts/interactive_health_tuner.py`](scripts/interactive_health_tuner.py)
+        - 支持加载已有实验数据 (`data/run_20260303_153938`)
+        - 交互式调整15项健康度参数（滑块实时响应）
+        - 实时绘制三种关键图表：健康度全景图、混淆矩阵、相关性散点图
+        - 支持参数导出为 JSON 格式
+    - **使用方式**: `python scripts/interactive_health_tuner.py`
+- **2026-03-03 [上午更新]**:
     - **结果持久化功能**: 新增模型保存、预测结果保存、健康度计算输入数据保存功能，支持配置参数 `save_model`, `save_predictions`, `save_health_data`。
     - **健康度模型升级 (v2.0 → v2.1)**: 状态分类从5状态简化为3状态（过烧/正常/欠烧），提高分类稳健性。
     - **健康度参数优化**: 调整 sigma_left/right、beta、thresh_normal、hysteresis_band、max_penalty、initial_filter_state 等参数，提高敏感度。
@@ -176,7 +184,8 @@ btp_project/
 | [`btp/preprocessor.py`](btp/preprocessor.py) | 物理特征提取 | `_extract_spline_features` |
 | [`btp/visualizer.py`](btp/visualizer.py) | 可视化模块（含热力图） | `plot_diagnosis_confusion_matrix` |
 | [`scripts/main.py`](scripts/main.py) | 实验流水线控制（含结果持久化） | `main()` 优先级调度逻辑 |
-| [`scripts/tune_health_params.py`](scripts/tune_health_params.py) | 交互式调优 | `HealthVisualizerApp` |
+| [`scripts/tune_health_params.py`](scripts/tune_health_params.py) | 交互式调优 (旧版) | `HealthVisualizerApp` |
+| [`scripts/interactive_health_tuner.py`](scripts/interactive_health_tuner.py) | [新增] 实时绘图调优器 | `InteractiveHealthTuner` |
 
 ---
 

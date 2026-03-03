@@ -242,7 +242,8 @@ btp_project/
 │   └── config.py             # 全局超参数与实验开关
 ├── scripts/                  # 运行脚本
 │   ├── main.py               # 主入口 (支持标准/消融/CV)
-│   ├── tune_health_params.py # 健康度参数交互式调优工具
+│   ├── tune_health_params.py # 健康度参数交互式调优工具 (旧版)
+│   ├── interactive_health_tuner.py # [新增] 实时绘图健康度调优器
 │   ├── analyze_ablation.py   # 消融实验自动化统计
 │   └── gui.py                # 在线推理演示 (WIP)
 ├── data/                     # 数据与缓存
@@ -277,6 +278,13 @@ btp_project/
 ## 📜 开发日志 (Developer Logs)
 
 ### 2026-03-03: v0.2.0-alpha 功能增强与优化
+-   **[Feature] 新增交互式健康度调优工具**：
+    -   新脚本 `scripts/interactive_health_tuner.py`，支持实时绘图的健康度参数调优。
+    -   自动加载已有实验数据 (`data/run_20260303_153938`)。
+    -   交互式调整 15 项健康度参数（滑块实时响应）。
+    -   实时显示三种关键图表：健康度全景图、混淆矩阵、相关性散点图。
+    -   支持参数导出为 JSON 格式。
+    -   使用方式：`python scripts/interactive_health_tuner.py`
 -   **[Feature] 结果持久化存储**：
     -   新增模型保存功能，自动保存到 `output/models/` 目录。
     -   新增预测结果保存功能，自动保存到 `output/predictions/` 目录。
