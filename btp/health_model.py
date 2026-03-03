@@ -32,16 +32,19 @@ from collections import deque
 
 class HealthModel:
     """
-    🏥 BTP健康度评估模型 + 工况状态诊断 (增强平滑版)
+    🏥 BTP健康度评估模型 + 工况状态诊断 (三状态分类版 v3.0)
+    
+    状态分类：
+    - 0: 过烧 (Over-burn) - BTP位置偏小
+    - 1: 正常 (Normal) - 健康度达标
+    - 2: 欠烧 (Under-burn) - BTP位置偏大
     """
     
-    # 定义状态常量映射
+    # 定义状态常量映射 (三状态分类)
     STATE_MAP = {
-        0: "过烧",       # Over-burn (Severe)
-        1: "疑似过烧",   # Suspected Over-burn
-        2: "正常",       # Normal
-        3: "疑似欠烧",   # Suspected Under-burn
-        4: "欠烧"        # Under-burn (Severe)
+        0: "过烧",       # Over-burn (BTP位置偏小)
+        1: "正常",       # Normal
+        2: "欠烧"        # Under-burn (BTP位置偏大)
     }
     
     def __init__(self, config):
@@ -49,14 +52,15 @@ class HealthModel:
         
         # ========== 目标值与参数 ==========
         self.mu = getattr(config, 'health_mu', 22.5)
-        self.sigma_left = getattr(config, 'health_sigma_left', 0.3)
-        self.sigma_right = getattr(config, 'health_sigma_right', 0.5)
+        self.sigma_left = getattr(config, 'health_sigma_left', 0.2)   # 提高对过烧方向的敏感度
+        self.sigma_right = getattr(config, 'health_sigma_right', 0.3)  # 提高对欠烧方向的敏感度
         self.width_tolerance = getattr(config, 'health_width_tol', 1.5)         
         
-        # ========== 阈值体系 (基准) ==========
-        self.thresh_normal = 65.0    # 健康阈值 (0-100分制)
-        self.thresh_fault = 38.0     # 故障/疑似分界线
-        self.hysteresis_band = 2.0   # [新增] 迟滞带宽，防止状态闪烁
+        # ========== 阈值体系 (可配置) ==========
+        self.thresh_normal = getattr(config, 'health_thresh_normal', 75.0)  # 正常阈值 (提高至75)
+        self.thresh_fault = getattr(config, 'health_thresh_fault', 50.0)    # 故障阈值 (保留参考)
+        self.hysteresis_band = getattr(config, 'health_hysteresis_band', 3.0)  # 迟滞带宽
+        self.max_penalty = getattr(config, 'health_max_penalty', 0.5)  # 最大罚分比例
         
         # ========== 权重参数 ==========
         self.history_window = getattr(config, 'volatility_window_size', 10)
@@ -64,28 +68,26 @@ class HealthModel:
         self.k_stab = getattr(config, 'health_k_stab', 2.0)
         self.alpha_trend = getattr(config, 'health_alpha_trend', 0.8)
         self.W_pos = getattr(config, 'health_W_pos', 1.2)
-        self.W_stab = getattr(config, 'health_W_stab', 0.8)
+        self.W_stab = getattr(config, 'health_W_stab', 1.0)  # 增加稳定性权重
         self.W_trend = getattr(config, 'health_W_trend', 1.0)
         
         # ========== 平滑参数 (二阶滤波) ==========
-        # beta 越大越平滑 (0~1)。二阶滤波建议 0.6~0.8，比一阶需要更小一点的值就能达到同样的平滑度
-        raw_beta = getattr(config, 'health_beta_ewma', 0.9) 
-        # 内部微调：二阶滤波因为串联了两次，如果沿用一阶的参数会变得过于迟钝
-        # 所以这里做一个映射，或者直接使用。通常 sqrt(beta) 是个不错的起点，但保持原值能获得更强平滑。
-        self.beta = raw_beta 
+        # beta 越大越平滑 (0~1)。降低至0.7以减少平滑滞后，提高响应速度
+        self.beta = getattr(config, 'health_beta_ewma', 0.7)
         
         # ========== 运行时状态 ==========
         self.history_queue = deque(maxlen=self.history_window)
         self.r_prev = None
         
-        # [新增] 滤波器状态向量 [Stage1_Output, Stage2_Output]
-        # 初始设为 1.0 (100分)，避免冷启动从0爬升
-        self.filter_state = {'s1': 1.0, 's2': 1.0} 
+        # 滤波器状态向量 [Stage1_Output, Stage2_Output]
+        # 初始设为配置值 (默认0.8)，避免冷启动从满分开始
+        initial_state = getattr(config, 'health_initial_filter_state', 0.8)
+        self.filter_state = {'s1': initial_state, 's2': initial_state}
         
-        # [新增] 上一时刻的状态 ID (用于迟滞判断)
-        self.last_state_idx = 2 # 默认为正常
+        # 上一时刻的状态 ID (用于迟滞判断)，默认为正常(1)
+        self.last_state_idx = 1
         
-        logging.info(f"[HealthModel] v2.0 初始化 | 二阶平滑β={self.beta} | 迟滞带=±{self.hysteresis_band}")
+        logging.info(f"[HealthModel] v3.0 初始化 | 三状态分类 | 二阶平滑β={self.beta} | 迟滞带=±{self.hysteresis_band} | 正常阈值={self.thresh_normal}")
     
     # =========================================================
     # 核心组件 A：静态偏离度 H_pos
@@ -115,8 +117,7 @@ class HealthModel:
         penalty = 0.0
         if width > 0:
             ratio = width / self.width_tolerance
-            max_penalty = 0.3
-            penalty = max_penalty * (1.0 - np.exp(-0.5 * ratio))
+            penalty = self.max_penalty * (1.0 - np.exp(-0.5 * ratio))
             
         H_pos = base_score * (1.0 - penalty)
         return float(np.clip(H_pos, 0.0, 1.0))
@@ -216,49 +217,44 @@ class HealthModel:
         return float(np.clip(s2_curr, 0.0, 1.0))
 
     # =========================================================
-    # [升级] 状态判定 (带迟滞)
+    # [升级] 状态判定 (三状态分类 + 迟滞)
     # =========================================================
     def _determine_state_hysteresis(self, health_score_val: float, current_val: float) -> int:
         """
-        基于施密特触发器逻辑的状态判定
-        防止在 65分 或 38分 附近反复跳变
+        三状态分类的状态判定 (带迟滞)
+        
+        状态定义：
+        - 0: 过烧 (BTP位置偏小，current_val < mu)
+        - 1: 正常 (健康度达标)
+        - 2: 欠烧 (BTP位置偏大，current_val > mu)
+        
+        判定逻辑：
+        1. 如果健康度 >= 有效阈值，判定为正常(1)
+        2. 否则根据方向判定过烧(0)或欠烧(2)
+        
+        迟滞机制：
+        - 从正常进入异常需要更低的分数 (thresh - band)
+        - 从异常回到正常需要更高的分数 (thresh + band)
         """
-        # health_score_val 是 0~100 的值
-        
-        # 1. 确定方向 (Direction)
-        # 偏大(欠烧方向) vs 偏小(过烧方向)
-        is_under_burn_side = (current_val > self.mu)
-        
-        # 2. 动态调整阈值 (Hysteresis Logic)
-        # 如果上一刻是正常(2)，那么进入异常需要更低的分数 (thresh - band)
-        # 如果上一刻是异常(<2 or >2)，那么回到正常需要更高的分数 (thresh + band)
-        
+        # 1. 动态调整阈值 (Hysteresis Logic)
         eff_thresh_normal = self.thresh_normal
-        eff_thresh_fault = self.thresh_fault
         
-        if self.last_state_idx == 2:
-            # 当前是正常，变坏稍微难一点
+        if self.last_state_idx == 1:
+            # 当前是正常状态，进入异常需要更低的分数
             eff_thresh_normal -= self.hysteresis_band
         else:
-            # 当前是异常，变好稍微难一点
+            # 当前是异常状态，回到正常需要更高的分数
             eff_thresh_normal += self.hysteresis_band
-            
-        # 同样的逻辑应用于 疑似 vs 严重
-        # 这里简化逻辑：主要防止 正常 <-> 疑似 的跳变
         
-        # 3. 判定逻辑
-        new_state = 2
-        
+        # 2. 三状态判定逻辑
         if health_score_val >= eff_thresh_normal:
-            new_state = 2 # 正常
+            new_state = 1  # 正常
         else:
-            # 进入非正常区域
-            is_suspected = (health_score_val >= eff_thresh_fault)
-            
-            if is_under_burn_side:
-                new_state = 3 if is_suspected else 4
+            # 异常状态：根据方向判定过烧或欠烧
+            if current_val < self.mu:
+                new_state = 0  # 过烧（BTP位置偏小）
             else:
-                new_state = 1 if is_suspected else 0
+                new_state = 2  # 欠烧（BTP位置偏大）
         
         self.last_state_idx = new_state
         return new_state
@@ -273,8 +269,10 @@ class HealthModel:
         # 重置状态
         self.history_queue.clear()
         self.r_prev = None
-        self.filter_state = {'s1': 1.0, 's2': 1.0} # 默认满分起步
-        self.last_state_idx = 2
+        # 使用配置的初始滤波状态 (默认0.8)
+        initial_state = getattr(self.cfg, 'health_initial_filter_state', 0.8)
+        self.filter_state = {'s1': initial_state, 's2': initial_state}
+        self.last_state_idx = 1  # 默认为正常状态
         
         if y_pred.ndim == 1: y_pred = y_pred.reshape(-1, 1)
         N = len(y_pred)
@@ -329,8 +327,10 @@ class HealthModel:
             # 重置内部状态，确保评价独立
             self.history_queue.clear()
             self.r_prev = None
-            self.filter_state = {'s1': 1.0, 's2': 1.0}
-            self.last_state_idx = 2
+            # 使用配置的初始滤波状态 (默认0.8)
+            initial_state = getattr(self.cfg, 'health_initial_filter_state', 0.8)
+            self.filter_state = {'s1': initial_state, 's2': initial_state}
+            self.last_state_idx = 1  # 默认为正常状态
             
             if y_true.ndim == 1: y_true = y_true.reshape(-1, 1)
             
@@ -396,7 +396,12 @@ if __name__ == "__main__":
     
     class MockConfig:
         volatility_window_size = 10
-        health_beta_ewma = 0.7 # 0.7 的二阶平滑非常强力
+        health_beta_ewma = 0.7  # 降低平滑滞后
+        health_sigma_left = 0.2
+        health_sigma_right = 0.3
+        health_thresh_normal = 75.0
+        health_hysteresis_band = 3.0
+        health_initial_filter_state = 0.8
     
     config = MockConfig()
     model = HealthModel(config)
@@ -427,18 +432,18 @@ if __name__ == "__main__":
     
     # 健康度
     ax2 = ax1.twinx()
-    ax2.plot(res['health_scores'], 'b-', linewidth=2, label='Health Score (2nd Order)')
+    ax2.plot(res['health_scores'], 'b-', linewidth=2, label='Health Score')
     
-    # 画阈值线
-    ax2.axhline(65, color='g', linestyle='--', alpha=0.5)
-    ax2.axhline(38, color='r', linestyle='--', alpha=0.5)
+    # 画阈值线 (使用新的阈值)
+    ax2.axhline(model.thresh_normal, color='g', linestyle='--', alpha=0.5, label=f'Normal Threshold ({model.thresh_normal})')
     
     ax2.set_ylim(0, 110)
     ax2.set_ylabel('Health Score')
     
-    plt.title(f"2nd Order Smoothing Test (Beta={config.health_beta_ewma})")
+    plt.title(f"Health Model v3.0 - 3-State Classification (Beta={config.health_beta_ewma})")
     plt.legend(loc='upper right')
     plt.grid(True, alpha=0.3)
     plt.show()
     
     print("Test finished. Check the plot for smoothness.")
+    print(f"State distribution: {dict(zip(*np.unique(res['pred_states'], return_counts=True)))}")

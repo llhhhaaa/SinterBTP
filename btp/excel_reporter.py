@@ -153,7 +153,8 @@ class ExcelReporter:
         })
 
         # ========== Sheet 2: 健康度详情 ==========
-        state_names = ["正常", "疑似偏热", "偏热", "疑似偏冷", "偏冷"]
+        # 三状态分类: 0:过烧, 1:正常, 2:欠烧
+        state_names = ["过烧", "正常", "欠烧"]
         
         health_scores = health_results.get("health_scores", [])
         
@@ -169,8 +170,8 @@ class ExcelReporter:
                 "样本ID": range(len(health_scores)),
                 "真实值_BTP": sliced_true, # 方便对照
                 "综合健康度_H": health_scores,
-                "预测状态": [state_names[s] if 0 <= s < 5 else f"未知({s})" for s in health_results.get("pred_states", [])],
-                "真实状态": [state_names[s] if 0 <= s < 5 else f"未知({s})" for s in health_results.get("true_states", [])],
+                "预测状态": [state_names[s] if 0 <= s < 3 else f"未知({s})" for s in health_results.get("pred_states", [])],
+                "真实状态": [state_names[s] if 0 <= s < 3 else f"未知({s})" for s in health_results.get("true_states", [])],
                 "静态偏离_H_pos": health_results.get("H_pos_series", [0]*len(health_scores)),
                 "动态稳定_H_stab": health_results.get("H_stab_series", [0]*len(health_scores)),
                 "趋势风险_H_trend": health_results.get("H_trend_series", [0]*len(health_scores)),

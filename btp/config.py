@@ -36,10 +36,10 @@ class TrainConfig:
     # ==========================================
     raw_seq_len: int = 720             # 原始高频序列长度 (EnhancedTransformer 输入)
     
-    USE_DATA_CACHE: bool = True        # 是否使用数据缓存
+    USE_DATA_CACHE: bool = False        # 是否使用数据缓存
     CACHE_DIR: str = "data/cache"      # 缓存目录
     PREGENERATE_ONLY: bool = False     # 是否仅运行预生成逻辑
-    enable_cv: bool = True                # 是否开启交叉验证 (1为开启, 0为关闭)
+    enable_cv: bool = False                # 是否开启交叉验证 (1为开启, 0为关闭)
 
     # 是否开启 RevIN (消除逐实例分布漂移)
     enable_revin: bool = True          # 是否开启 RevIN (消除逐实例分布漂移)
@@ -161,8 +161,8 @@ class TrainConfig:
     lr: float = 0.0001                   # 学习率 (Adam 优化器)
     epochs: int = 15                     # 最大训练轮数
     batch_size: int = 256                # 批大小
-    val_split: float = 0.15               # 验证集比例
-    test_split: float = 0.15              # 测试集比例 (0 表示不划分独立测试集)
+    val_split: float = 0.2               # 验证集比例
+    test_split: float = 0.25              # 测试集比例 (0 表示不划分独立测试集)
     seed: int = 42                       # 随机种子
     num_workers: int = 4                 # 数据加载线程数
     weight_decay: float = 0.01           # L2 正则化
@@ -189,8 +189,8 @@ class TrainConfig:
     # ==========================================
     # 6) 业务逻辑：BTP阈值与健康度算法
     # ==========================================
-    btp_L_low: float = 22.44           
-    btp_L_r: float = 22.56             
+    btp_L_low: float = 22.40           
+    btp_L_r: float = 22.55             
     btp_L_up: float = 22.7             
 
     h_normal_min: float = 0.6          
@@ -212,16 +212,25 @@ class TrainConfig:
     exceed_enter_eps: float = 0.05     
     exceed_exit_eps: float = 0.03      
     
-    health_mu: float = 22.56           
-    health_sigma_left: float = 0.25    
-    health_sigma_right: float = 0.2    
-    health_sigma_limit: float = 0.15   
-    health_k_stab: float = 2.0         
-    health_alpha_trend: float = 2      
-    health_W_pos: float = 2.79         
-    health_W_stab: float = 1.46        
-    health_W_trend: float = 2          
-    health_beta_ewma: float = 0.97     
+    health_mu: float = 22.56
+    health_sigma_left: float = 0.20    # 过烧方向敏感度 (调整自0.08，降低敏感度)
+    health_sigma_right: float = 0.30   # 欠烧方向敏感度 (调整自0.08，降低敏感度)
+    health_sigma_limit: float = 0.15
+    health_k_stab: float = 2.0
+    health_alpha_trend: float = 2
+    health_W_pos: float = 2.79
+    health_W_stab: float = 1.2         # 增加稳定性权重 (调整自1.0)
+    health_W_trend: float = 2
+    health_beta_ewma: float = 0.85     # 增大EWMA平滑系数，更好地跟随真实健康度变化 (调整自0.7)
+    
+    # ==========================================
+    # 6.1) 健康度状态判定参数 (可配置)
+    # ==========================================
+    health_thresh_normal: float = 60.0      # 正常状态阈值 (调整自82.0，大幅降低以提高正常状态识别率)
+    health_thresh_fault: float = 50.0       # 故障/异常阈值 (保留用于参考，原值38.0)
+    health_hysteresis_band: float = 5.0     # 迟滞带宽，防止状态闪烁 (调整自3.0)
+    health_max_penalty: float = 0.5         # 区间宽度的罚分上限 (原值0.3)
+    health_initial_filter_state: float = 0.8  # 冷启动初始滤波状态 (原值1.0)
     
     
     enable_delta_forecast: bool = 0    # 是否预测"变化量"(Delta)
@@ -232,6 +241,13 @@ class TrainConfig:
     exp_name: str = ""                 
     save_aux_outputs: bool = True      
     output_dir: str = field(default="") 
+    
+    # ==========================================
+    # 8) 模型与结果保存配置 (Save Options)
+    # ==========================================
+    save_model: bool = True             # 是否保存模型权重
+    save_predictions: bool = True       # 是否保存预测结果
+    save_health_data: bool = True      # 是否保存健康度计算输入数据 
 
     def __post_init__(self):
         """ 初始化后的逻辑 """
