@@ -213,8 +213,8 @@ class TrainConfig:
     exceed_exit_eps: float = 0.03      
     
     health_mu: float = 22.56
-    health_sigma_left: float = 0.18    # 提高对过烧方向的敏感度 (调整自0.2)
-    health_sigma_right: float = 0.25   # 提高对欠烧方向的敏感度 (调整自0.3)
+    health_sigma_left: float = 0.20    # 过烧方向敏感度 (调整自0.08，降低敏感度)
+    health_sigma_right: float = 0.30   # 欠烧方向敏感度 (调整自0.08，降低敏感度)
     health_sigma_limit: float = 0.15
     health_k_stab: float = 2.0
     health_alpha_trend: float = 2
@@ -226,7 +226,7 @@ class TrainConfig:
     # ==========================================
     # 6.1) 健康度状态判定参数 (可配置)
     # ==========================================
-    health_thresh_normal: float = 70.0      # 正常状态阈值 (调整自75.0)
+    health_thresh_normal: float = 60.0      # 正常状态阈值 (调整自82.0，大幅降低以提高正常状态识别率)
     health_thresh_fault: float = 50.0       # 故障/异常阈值 (保留用于参考，原值38.0)
     health_hysteresis_band: float = 5.0     # 迟滞带宽，防止状态闪烁 (调整自3.0)
     health_max_penalty: float = 0.5         # 区间宽度的罚分上限 (原值0.3)

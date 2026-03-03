@@ -42,17 +42,17 @@ def setup_chinese_fonts():
 
 def plot_confusion_matrix_heatmap(cm, class_names, save_path):
     """
-    绘制 5×5 混淆矩阵热力图
-    强制使用完整的 5 类标签，确保矩阵维度正确
+    绘制 3×3 混淆矩阵热力图
+    使用完整的 3 类标签，确保矩阵维度正确
     """
-    # 强制使用 5 类标签（过烧、疑似过烧、正常、疑似欠烧、欠烧）
-    n_classes = 5
+    # 使用 3 类标签（过烧、正常、欠烧）
+    n_classes = 3
     
-    # 如果输入的混淆矩阵不是 5×5，需要重新构建
-    if cm.shape[0] != 5 or cm.shape[1] != 5:
-        print(f"[警告] 混淆矩阵维度 {cm.shape} 不是 5×5，正在重建...")
+    # 如果输入的混淆矩阵不是 3×3，需要重新构建
+    if cm.shape[0] != 3 or cm.shape[1] != 3:
+        print(f"[警告] 混淆矩阵维度 {cm.shape} 不是 3×3，正在重建...")
         # 这里 cm 已经是从 confusion_matrix 得到的，我们需要在调用时修复
-        # 但如果进来时不是 5×5，说明数据中缺少某些类别
+        # 但如果进来时不是 3×3，说明数据中缺少某些类别
     
     fig, ax = plt.subplots(figsize=(10, 9))
     
@@ -65,7 +65,7 @@ def plot_confusion_matrix_heatmap(cm, class_names, save_path):
     # 绘制热力图
     im = ax.imshow(cm_percent, cmap='YlOrRd', aspect='auto', vmin=0, vmax=100)
     
-    # 设置标签 - 强制使用 5 类
+    # 设置标签 - 使用 3 类
     ax.set_xticks(np.arange(n_classes))
     ax.set_yticks(np.arange(n_classes))
     ax.set_xticklabels(class_names, fontsize=12)
@@ -92,7 +92,7 @@ def plot_confusion_matrix_heatmap(cm, class_names, save_path):
     
     ax.set_xlabel('预测工况', fontsize=14, fontweight='bold')
     ax.set_ylabel('真实工况', fontsize=14, fontweight='bold')
-    ax.set_title('工况分类混淆矩阵 (5类)', fontsize=16, fontweight='bold', pad=15)
+    ax.set_title('工况分类混淆矩阵 (3类)', fontsize=16, fontweight='bold', pad=15)
     
     # 添加颜色条
     cbar = plt.colorbar(im, ax=ax, shrink=0.8)
@@ -101,7 +101,7 @@ def plot_confusion_matrix_heatmap(cm, class_names, save_path):
     # 添加方向标注
     ax.text(-0.8, 0.5, "← 过烧", rotation=90, va='center', fontsize=11,
             color='darkred', weight='bold')
-    ax.text(-0.8, 4.5, "欠烧 →", rotation=90, va='center', fontsize=11,
+    ax.text(-0.8, 2.5, "欠烧 →", rotation=90, va='center', fontsize=11,
             color='darkred', weight='bold')
     
     plt.tight_layout()
@@ -264,15 +264,15 @@ def main():
         corr = 0
     
     # 工况分类准确率
-    # 强制使用 5 类标签，确保混淆矩阵是 5×5
+    # 使用 3 类标签，确保混淆矩阵是 3×3
     if 'true_states' in health_results and 'pred_states' in health_results:
         accuracy = np.mean(health_results['true_states'] == health_results['pred_states'])
-        # 使用 labels=[0, 1, 2, 3, 4] 强制生成完整的 5×5 混淆矩阵
+        # 使用 labels=[0, 1, 2] 生成完整的 3×3 混淆矩阵
         cm = confusion_matrix(health_results['true_states'], health_results['pred_states'],
-                              labels=[0, 1, 2, 3, 4])
+                              labels=[0, 1, 2])
         print(f"  混淆矩阵维度: {cm.shape}")
         # 打印各类别分布
-        for i, name in enumerate(['过烧', '疑似过烧', '正常', '疑似欠烧', '欠烧']):
+        for i, name in enumerate(['过烧', '正常', '欠烧']):
             true_count = np.sum(health_results['true_states'] == i)
             pred_count = np.sum(health_results['pred_states'] == i)
             print(f"    {name}: 真值={true_count}, 预测={pred_count}")
@@ -291,7 +291,7 @@ def main():
     
     # 混淆矩阵
     if cm is not None:
-        class_names = ['过烧', '疑似过烧', '正常', '疑似欠烧', '欠烧']
+        class_names = ['过烧', '正常', '欠烧']
         plot_confusion_matrix_heatmap(cm, class_names, os.path.join(figures_dir, "health_confusion_matrix.png"))
         print("  已生成: health_confusion_matrix.png")
     
@@ -354,7 +354,7 @@ def main():
 def generate_paper_draft(output_dir, health_results, metrics, cm):
     """生成论文初稿"""
     
-    state_names = ['过烧', '疑似过烧', '正常', '疑似欠烧', '欠烧']
+    state_names = ['过烧', '正常', '欠烧']
     
     # 计算分类报告
     if 'true_states' in health_results and 'pred_states' in health_results:
@@ -397,15 +397,13 @@ $$H = H_{{pos}}^{{W_{{pos}}}} \cdot H_{{stab}}^{{W_{{stab}}}} \cdot H_{{trend}}^
 
 ### 2.2 状态判定机制
 
-模型采用带迟滞的施密特触发器逻辑进行状态判定，将工况分为5类：
+模型采用带迟滞的施密特触发器逻辑进行状态判定，将工况分为3类：
 
 | 状态ID | 状态名称 | 健康度范围 |
 |--------|----------|------------|
-| 0 | 过烧 | < 38 且 偏小 |
-| 1 | 疑似过烧 | 38~65 且 偏小 |
-| 2 | 正常 | ≥ 65 |
-| 3 | 疑似欠烧 | 38~65 且 偏大 |
-| 4 | 欠烧 | < 38 且 偏大 |
+| 0 | 过烧 | BTP位置偏小 |
+| 1 | 正常 | 健康度达标 |
+| 2 | 欠烧 | BTP位置偏大 |
 
 ## 3. 实验结果
 
@@ -426,8 +424,8 @@ $$H = H_{{pos}}^{{W_{{pos}}}} \cdot H_{{stab}}^{{W_{{stab}}}} \cdot H_{{trend}}^
 
 #### 混淆矩阵
 
-|  | 过烧 | 疑似过烧 | 正常 | 疑似欠烧 | 欠烧 |
-|--|------|----------|------|----------|------|
+|  | 过烧 | 正常 | 欠烧 |
+|--|------|------|------|
 """
     
     if cm is not None:
@@ -463,7 +461,7 @@ $$H = H_{{pos}}^{{W_{{pos}}}} \cdot H_{{stab}}^{{W_{{stab}}}} \cdot H_{{trend}}^
 
 ![工况分类混淆矩阵](figures/health_confusion_matrix.png)
 
-混淆矩阵展示了模型在五种工况分类上的表现。对角线元素表示正确分类的样本数，非对角线元素表示误分类情况。
+混淆矩阵展示了模型在三种工况分类上的表现。对角线元素表示正确分类的样本数，非对角线元素表示误分类情况。
 
 ### 4.2 健康度评分曲线
 
